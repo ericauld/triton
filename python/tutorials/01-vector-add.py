@@ -10,7 +10,8 @@ In doing so, you will learn about:
 
 * The `triton.jit` decorator, which is used to define Triton kernels.
 
-* The best practices for validating and benchmarking your custom ops against native reference implementations.
+* The best practices for validating and benchmarking your custom ops against
+  native reference implementations.
 
 """
 
@@ -62,9 +63,10 @@ def add(x: torch.Tensor, y: torch.Tensor):
     output = torch.empty_like(x)
     assert x.is_cuda and y.is_cuda and output.is_cuda
     n_elements = output.numel()
-    # The SPMD launch grid denotes the number of kernel instances that run in parallel.
-    # It is analogous to CUDA launch grids. It can be either Tuple[int], or Callable(metaparameters) -> Tuple[int].
-    # In this case, we use a 1D grid where the size is the number of blocks:
+    # The SPMD launch grid denotes the number of kernel instances that run in
+    # parallel. It is analogous to CUDA launch grids. It can be either
+    # Tuple[int], or Callable(metaparameters) -> Tuple[int]. In this case, we
+    # use a 1D grid where the size is the number of blocks:
     grid = lambda meta: (triton.cdiv(n_elements, meta['BLOCK_SIZE']), )
     # NOTE:
     #  - Each torch.tensor object is implicitly converted into a pointer to its first element.
@@ -93,13 +95,13 @@ print(f'The maximum difference between torch and triton is '
 # %%
 # Seems like we're good to go!
 
-# %%
-# Benchmark
+# %% Benchmark
 # ---------
 #
-# We can now benchmark our custom op on vectors of increasing sizes to get a sense of how it does relative to PyTorch.
-# To make things easier, Triton has a set of built-in utilities that allow us to concisely plot the performance of our custom ops.
-# for different problem sizes.
+# We can now benchmark our custom op on vectors of increasing sizes to get a
+# sense of how it does relative to PyTorch. To make things easier, Triton has a
+# set of built-in utilities that allow us to concisely plot the performance of
+# our custom ops. for different problem sizes.
 
 
 @triton.testing.perf_report(
@@ -127,7 +129,7 @@ def benchmark(size, provider):
     return gbps(ms), gbps(max_ms), gbps(min_ms)
 
 
-# %%
-# We can now run the decorated function above. Pass `print_data=True` to see the performance number, `show_plots=True` to plot them, and/or
+# %% We can now run the decorated function above. Pass `print_data=True` to see
+# the performance number, `show_plots=True` to plot them, and/or
 # `save_path='/path/to/results/' to save them to disk along with raw CSV data:
 benchmark.run(print_data=True, show_plots=True)

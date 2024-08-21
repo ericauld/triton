@@ -2,12 +2,12 @@
 Fused Attention
 ===============
 
-This is a Triton implementation of the Flash Attention v2 algorithm from Tri Dao (https://tridao.me/publications/flash2/flash2.pdf)
-Credits: OpenAI kernel team
+This is a Triton implementation of the Flash Attention v2 algorithm from Tri Dao
+(https://tridao.me/publications/flash2/flash2.pdf) Credits: OpenAI kernel team
 
-Extra Credits:
-- Original flash attention paper (https://arxiv.org/abs/2205.14135)
-- Rabe and Staats (https://arxiv.org/pdf/2112.05682v2.pdf)
+Extra Credits: - Original flash attention paper
+(https://arxiv.org/abs/2205.14135) - Rabe and Staats
+(https://arxiv.org/pdf/2112.05682v2.pdf)
 
 """
 
@@ -551,7 +551,8 @@ def test_op(Z, H, N_CTX, HEAD_DIM, causal, dtype=torch.float16):
     assert torch.allclose(ref_out, tri_out, atol=1e-2, rtol=0)
     rtol = 0.0
     # Relative tolerance workaround for known hardware limitation of MI200 GPU.
-    # For details see https://pytorch.org/docs/stable/notes/numerical_accuracy.html#reduced-precision-fp16-and-bf16-gemms-and-convolutions-on-amd-instinct-mi200-devices
+    # For details see
+    # https://pytorch.org/docs/stable/notes/numerical_accuracy.html#reduced-precision-fp16-and-bf16-gemms-and-convolutions-on-amd-instinct-mi200-devices
     if torch.version.hip is not None and triton.runtime.driver.active.get_current_target().arch == "gfx90a":
         rtol = 1e-2
     assert torch.allclose(ref_dv, tri_dv, atol=1e-2, rtol=rtol)

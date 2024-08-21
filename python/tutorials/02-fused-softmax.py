@@ -14,12 +14,12 @@ In doing so, you will learn about:
 
 """
 
-# %%
-# Motivations
+# %% Motivations
 # -----------
 #
-# Custom GPU kernels for elementwise additions are educationally valuable but won't get you very far in practice.
-# Let us consider instead the case of a simple (numerically stabilized) softmax operation:
+# Custom GPU kernels for elementwise additions are educationally valuable but
+# won't get you very far in practice. Let us consider instead the case of a
+# simple (numerically stabilized) softmax operation:
 
 import torch
 
@@ -57,26 +57,27 @@ def naive_softmax(x):
     return ret
 
 
-# %%
-# When implemented naively in PyTorch, computing :code:`y = naive_softmax(x)` for :math:`x \in R^{M \times N}`
-# requires reading :math:`5MN + 2M` elements from DRAM and writing back :math:`3MN + 2M` elements.
-# This is obviously wasteful; we'd prefer to have a custom "fused" kernel that only reads
-# X once and does all the necessary computations on-chip.
-# Doing so would require reading and writing back only :math:`MN` bytes, so we could
-# expect a theoretical speed-up of ~4x (i.e., :math:`(8MN + 4M) / 2MN`).
-# The `torch.jit.script` flags aims to perform this kind of "kernel fusion" automatically
-# but, as we will see later, it is still far from ideal.
+# %% When implemented naively in PyTorch, computing :code:`y = naive_softmax(x)`
+# for :math:`x \in R^{M \times N}` requires reading :math:`5MN + 2M` elements
+# from DRAM and writing back :math:`3MN + 2M` elements. This is obviously
+# wasteful; we'd prefer to have a custom "fused" kernel that only reads X once
+# and does all the necessary computations on-chip. Doing so would require
+# reading and writing back only :math:`MN` bytes, so we could expect a
+# theoretical speed-up of ~4x (i.e., :math:`(8MN + 4M) / 2MN`). The
+# `torch.jit.script` flags aims to perform this kind of "kernel fusion"
+# automatically but, as we will see later, it is still far from ideal.
 
-# %%
-# Compute Kernel
+# %% Compute Kernel
 # --------------
 #
-# Our softmax kernel works as follows: each program loads a set of rows of the input matrix X strided by number of programs,
-# normalizes it and writes back the result to the output Y.
+# Our softmax kernel works as follows: each program loads a set of rows of the
+# input matrix X strided by number of programs, normalizes it and writes back
+# the result to the output Y.
 #
 # Note that one important limitation of Triton is that each block must have a
-# power-of-two number of elements, so we need to internally "pad" each row and guard the
-# memory operations properly if we want to handle any possible input shapes:
+# power-of-two number of elements, so we need to internally "pad" each row and
+# guard the memory operations properly if we want to handle any possible input
+# shapes:
 
 
 @triton.jit
@@ -147,19 +148,23 @@ def softmax(x):
         n_regs = kernel.n_regs
         size_smem = kernel.metadata.shared
         if is_hip():
-            # NUM_REGS represents the number of regular purpose registers. On CDNA architectures this is half of all registers available.
-            # However, this is not always the case. In most cases all registers can be used as regular purpose registers.
-            # ISA SECTION (3.6.4 for CDNA3)
-            # VGPRs are allocated out of two pools: regular VGPRs and accumulation VGPRs. Accumulation VGPRs are used
-            # with matrix VALU instructions, and can also be loaded directly from memory. A wave may have up to 512 total
-            # VGPRs, 256 of each type. When a wave has fewer than 512 total VGPRs, the number of each type is flexible - it is
-            # not required to be equal numbers of both types.
+            # NUM_REGS represents the number of regular purpose registers. On
+            # CDNA architectures this is half of all registers available.
+            # However, this is not always the case. In most cases all registers
+            # can be used as regular purpose registers. ISA SECTION (3.6.4 for
+            # CDNA3) VGPRs are allocated out of two pools: regular VGPRs and
+            # accumulation VGPRs. Accumulation VGPRs are used with matrix VALU
+            # instructions, and can also be loaded directly from memory. A wave
+            # may have up to 512 total VGPRs, 256 of each type. When a wave has
+            # fewer than 512 total VGPRs, the number of each type is flexible -
+            # it is not required to be equal numbers of both types.
             if is_cdna():
                 NUM_GPRS = NUM_REGS * 2
 
-            # MAX_NUM_THREADS represents maximum number of resident threads per multi-processor.
-            # When we divide this number with WARP_SIZE we get maximum number of waves that can
-            # execute on a CU (multi-processor)  in parallel.
+            # MAX_NUM_THREADS represents maximum number of resident threads per
+            # multi-processor. When we divide this number with WARP_SIZE we get
+            # maximum number of waves that can execute on a CU (multi-processor)
+            # in parallel.
             MAX_NUM_THREADS = properties["max_threads_per_sm"]
             max_num_waves = MAX_NUM_THREADS // WARP_SIZE
             occupancy = min(NUM_GPRS // WARP_SIZE // n_regs, max_num_waves) // num_warps
@@ -188,7 +193,8 @@ def softmax(x):
 # ---------
 
 # %%
-# We make sure that we test our kernel on a matrix with an irregular number of rows and columns.
+# We make sure that we test our kernel on a matrix with an irregular number of
+# rows and columns.
 # This will allow us to verify that our padding mechanism works.
 
 torch.manual_seed(0)
@@ -200,12 +206,13 @@ assert torch.allclose(y_triton, y_torch), (y_triton, y_torch)
 # %%
 # As expected, the results are identical.
 
-# %%
-# Benchmark
+# %% Benchmark
 # ---------
 #
-# Here we will benchmark our operation as a function of the number of columns in the input matrix -- assuming 4096 rows.
-# We will then compare its performance against (1) :code:`torch.softmax` and (2) the :code:`naive_softmax` defined above.
+# Here we will benchmark our operation as a function of the number of columns in
+# the input matrix -- assuming 4096 rows. We will then compare its performance
+# against (1) :code:`torch.softmax` and (2) the :code:`naive_softmax` defined
+# above.
 
 
 @triton.testing.perf_report(
@@ -237,8 +244,10 @@ def benchmark(M, N, provider):
 
 benchmark.run(show_plots=True, print_data=True)
 
-# %%
-# In the above plot, we can see that:
-#  - Triton is 4x faster than the Torch JIT. This confirms our suspicions that the Torch JIT does not do any fusion here.
-#  - Triton is noticeably faster than :code:`torch.softmax` -- in addition to being **easier to read, understand and maintain**.
-#    Note however that the PyTorch `softmax` operation is more general and will work on tensors of any shape.
+# %% In the above plot, we can see that:
+#  - Triton is 4x faster than the Torch JIT. This confirms our suspicions that
+#    the Torch JIT does not do any fusion here.
+#  - Triton is noticeably faster than :code:`torch.softmax` -- in addition to
+#    being **easier to read, understand and maintain**. Note however that the
+#    PyTorch `softmax` operation is more general and will work on tensors of any
+#    shape.

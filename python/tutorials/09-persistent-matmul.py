@@ -1,10 +1,13 @@
 """
 Persistent FP8 Matmul
 =====================
-This script demonstrates persistent kernel implementations of matrix multiplication using Triton.
-It includes various matmul methods, such as naive, persistent, and TMA (Tensor Memory Accelerator) based approaches, and only supports GPUs with compute capability >= 9.0.
-Triton and CuBLAS implementations are benchmarked under different configurations and evaluated using the proton profiler.
-Users can pass command-line arguments to specify matrix dimensions and iteration steps flexibly.
+This script demonstrates persistent kernel implementations of matrix
+multiplication using Triton. It includes various matmul methods, such as naive,
+persistent, and TMA (Tensor Memory Accelerator) based approaches, and only
+supports GPUs with compute capability >= 9.0. Triton and CuBLAS implementations
+are benchmarked under different configurations and evaluated using the proton
+profiler. Users can pass command-line arguments to specify matrix dimensions and
+iteration steps flexibly.
 """
 
 import argparse

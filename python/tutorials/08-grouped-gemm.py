@@ -275,10 +275,13 @@ def benchmark(N, provider):
 
     quantiles = [0.5, 0.2, 0.8]
     if provider == 'cublas':
-        ms, min_ms, max_ms = triton.testing.do_bench(lambda: torch_perf_fn(group_A, group_B), quantiles=quantiles)
+        ms, min_ms, max_ms = triton.testing.do_bench(lambda: torch_perf_fn(group_A, group_B), 
+                                                     quantiles=quantiles)
     if provider == 'triton':
         ms, min_ms, max_ms = triton.testing.do_bench(
-            lambda: triton_perf_fn(d_a_ptrs, d_b_ptrs, d_c_ptrs, d_g_sizes, d_g_lds, group_size), quantiles=quantiles)
+            lambda: triton_perf_fn(d_a_ptrs, d_b_ptrs, 
+                                   d_c_ptrs, d_g_sizes, d_g_lds, group_size), 
+            quantiles=quantiles)
     return ms, max_ms, min_ms
 
 

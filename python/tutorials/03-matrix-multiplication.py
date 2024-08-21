@@ -16,44 +16,41 @@ You will specifically learn about:
 
 """
 
-# %%
-# Motivations
+# %% Motivations
 # -----------
 #
-# Matrix multiplications are a key building block of most modern high-performance computing systems.
-# They are notoriously hard to optimize, hence their implementation is generally done by
-# hardware vendors themselves as part of so-called "kernel libraries" (e.g., cuBLAS).
-# Unfortunately, these libraries are often proprietary and cannot be easily customized
-# to accommodate the needs of modern deep learning workloads (e.g., fused activation functions).
-# In this tutorial, you will learn how to implement efficient matrix multiplications by
-# yourself with Triton, in a way that is easy to customize and extend.
+# Matrix multiplications are a key building block of most modern
+# high-performance computing systems. They are notoriously hard to optimize,
+# hence their implementation is generally done by hardware vendors themselves as
+# part of so-called "kernel libraries" (e.g., cuBLAS). Unfortunately, these
+# libraries are often proprietary and cannot be easily customized to accommodate
+# the needs of modern deep learning workloads (e.g., fused activation
+# functions). In this tutorial, you will learn how to implement efficient matrix
+# multiplications by yourself with Triton, in a way that is easy to customize
+# and extend.
 #
-# Roughly speaking, the kernel that we will write will implement the following blocked
-# algorithm to multiply a (M, K) by a (K, N) matrix:
+# Roughly speaking, the kernel that we will write will implement the following
+# blocked algorithm to multiply a (M, K) by a (K, N) matrix:
 #
 #  .. code-block:: python
 #
 #    # Do in parallel
-#    for m in range(0, M, BLOCK_SIZE_M):
-#      # Do in parallel
-#      for n in range(0, N, BLOCK_SIZE_N):
-#        acc = zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=float32)
-#        for k in range(0, K, BLOCK_SIZE_K):
-#          a = A[m : m+BLOCK_SIZE_M, k : k+BLOCK_SIZE_K]
-#          b = B[k : k+BLOCK_SIZE_K, n : n+BLOCK_SIZE_N]
-#          acc += dot(a, b)
-#        C[m : m+BLOCK_SIZE_M, n : n+BLOCK_SIZE_N] = acc
+#    for m in range(0, M, BLOCK_SIZE_M): # Do in parallel for n in range(0, N,
+#      BLOCK_SIZE_N): acc = zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=float32)
+#      for k in range(0, K, BLOCK_SIZE_K): a = A[m : m+BLOCK_SIZE_M, k :
+#        k+BLOCK_SIZE_K] b = B[k : k+BLOCK_SIZE_K, n : n+BLOCK_SIZE_N] acc +=
+#        dot(a, b) C[m : m+BLOCK_SIZE_M, n : n+BLOCK_SIZE_N] = acc
 #
-# where each iteration of the doubly-nested for-loop is performed by a dedicated Triton program instance.
+# where each iteration of the doubly-nested for-loop is performed by a dedicated
+# Triton program instance.
 
-# %%
-# Compute Kernel
+# %% Compute Kernel
 # --------------
 #
-# The above algorithm is, actually, fairly straightforward to implement in Triton.
-# The main difficulty comes from the computation of the memory locations at which blocks
-# of :code:`A` and :code:`B` must be read in the inner loop. For that, we need
-# multi-dimensional pointer arithmetic.
+# The above algorithm is, actually, fairly straightforward to implement in
+# Triton. The main difficulty comes from the computation of the memory locations
+# at which blocks of :code:`A` and :code:`B` must be read in the inner loop. For
+# that, we need multi-dimensional pointer arithmetic.
 #
 # Pointer Arithmetic
 # ~~~~~~~~~~~~~~~~~~~
@@ -65,13 +62,22 @@ You will specifically learn about:
 #
 #  .. code-block:: python
 #
-#    &A[m : m+BLOCK_SIZE_M, k:k+BLOCK_SIZE_K] =  a_ptr + (m : m+BLOCK_SIZE_M)[:, None]*A.stride(0) + (k : k+BLOCK_SIZE_K)[None, :]*A.stride(1);
-#    &B[k : k+BLOCK_SIZE_K, n:n+BLOCK_SIZE_N] =  b_ptr + (k : k+BLOCK_SIZE_K)[:, None]*B.stride(0) + (n : n+BLOCK_SIZE_N)[None, :]*B.stride(1);
+#    &A[m : m+BLOCK_SIZE_M, k:k+BLOCK_SIZE_K] =  a_ptr 
+#          + (m : m+BLOCK_SIZE_M)[:, None]*A.stride(0) 
+#          + (k : k+BLOCK_SIZE_K)[None, :]*A.stride(1);
+#    &B[k : k+BLOCK_SIZE_K, n:n+BLOCK_SIZE_N] =  b_ptr 
+#          + (k : k+BLOCK_SIZE_K)[:, None]*B.stride(0) 
+#          + (n : n+BLOCK_SIZE_N)[None, :]*B.stride(1);
 #
-# Which means that pointers for blocks of A and B can be initialized (i.e., :code:`k=0`) in Triton as the following
-# code. Also note that we need an extra modulo to handle the case where :code:`M` is not a multiple of
-# :code:`BLOCK_SIZE_M` or :code:`N` is not a multiple of :code:`BLOCK_SIZE_N`, in which case we can pad the data with
-# some useless values, which will not contribute to the results. For the :code:`K` dimension, we will handle that later
+# Which means that pointers for blocks of A and B 
+# can be initialized (i.e., :code:`k=0`) 
+# in Triton as the following
+# code. Also note that we need an extra
+#  modulo to handle the case where :code:`M` is not a multiple of
+# :code:`BLOCK_SIZE_M` or :code:`N` is not a multiple of :code:`BLOCK_SIZE_N`, 
+# in which case we can pad the data with
+# some useless values, which will not contribute to the results. 
+# For the :code:`K` dimension, we will handle that later
 # using masking load semantics.
 #
 #  .. code-block:: python
@@ -93,24 +99,21 @@ You will specifically learn about:
 # L2 Cache Optimizations
 # ~~~~~~~~~~~~~~~~~~~~~~
 #
-# As mentioned above, each program instance computes a :code:`[BLOCK_SIZE_M, BLOCK_SIZE_N]`
-# block of :code:`C`.
-# It is important to remember that the order in which these blocks are computed does
-# matter, since it affects the L2 cache hit rate of our program, and unfortunately, a
-# simple row-major ordering
+# As mentioned above, each program instance computes a :code:`[BLOCK_SIZE_M,
+# BLOCK_SIZE_N]` block of :code:`C`. It is important to remember that the order
+# in which these blocks are computed does matter, since it affects the L2 cache
+# hit rate of our program, and unfortunately, a simple row-major ordering
 #
 #  .. code-block:: Python
 #
-#    pid = tl.program_id(axis=0)
-#    grid_n = tl.cdiv(N, BLOCK_SIZE_N)
-#    pid_m = pid // grid_n
-#    pid_n = pid % grid_n
+#    pid = tl.program_id(axis=0) grid_n = tl.cdiv(N, BLOCK_SIZE_N) pid_m = pid
+#    // grid_n pid_n = pid % grid_n
 #
 # is just not going to cut it.
 #
-# One possible solution is to launch blocks in an order that promotes data reuse.
-# This can be done by 'super-grouping' blocks in groups of :code:`GROUP_M` rows before
-# switching to the next column:
+# One possible solution is to launch blocks in an order that promotes data
+# reuse. This can be done by 'super-grouping' blocks in groups of
+# :code:`GROUP_M` rows before switching to the next column:
 #
 #  .. code-block:: python
 #
@@ -134,15 +137,16 @@ You will specifically learn about:
 #    # Col-id of the program in the *launch grid*
 #    pid_n = (pid % num_pid_in_group) // group_size_m
 #
-# For example, in the following matmul where each matrix is 9 blocks by 9 blocks,
-# we can see that if we compute the output in row-major ordering, we need to load 90
-# blocks into SRAM to compute the first 9 output blocks, but if we do it in grouped
-# ordering, we only need to load 54 blocks.
+# For example, in the following matmul where each matrix is 9 blocks by 9
+# blocks, we can see that if we compute the output in row-major ordering, we
+# need to load 90 blocks into SRAM to compute the first 9 output blocks, but if
+# we do it in grouped ordering, we only need to load 54 blocks.
 #
 #   .. image:: grouped_vs_row_major_ordering.png
 #
-# In practice, this can improve the performance of our matrix multiplication kernel by
-# more than 10\% on some hardware architecture (e.g., 220 to 245 TFLOPS on A100).
+# In practice, this can improve the performance of our matrix multiplication
+# kernel by more than 10\% on some hardware architecture (e.g., 220 to 245
+# TFLOPS on A100).
 #
 
 # %%
@@ -388,8 +392,7 @@ if TORCH_HAS_FP8 and is_cuda():
     else:
         print("❌ Triton and Torch differ")
 
-# %%
-# Benchmark
+# %% Benchmark
 # ---------
 #
 # Square Matrix Performance
