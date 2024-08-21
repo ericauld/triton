@@ -24,6 +24,7 @@ import torch
 import triton
 import triton.language as tl
 
+# EA: So what is this pointer type? Is it a Triton type?
 
 @triton.jit
 def add_kernel(x_ptr,  # *Pointer* to first input vector.
@@ -44,6 +45,8 @@ def add_kernel(x_ptr,  # *Pointer* to first input vector.
     offsets = block_start + tl.arange(0, BLOCK_SIZE)
     # Create a mask to guard memory operations against out-of-bounds accesses.
     mask = offsets < n_elements
+    # EA: So this is broadcast, I guess
+
     # Load x and y from DRAM, masking out any extra elements in case the input is not a
     # multiple of the block size.
     x = tl.load(x_ptr + offsets, mask=mask)
@@ -71,6 +74,9 @@ def add(x: torch.Tensor, y: torch.Tensor):
     # NOTE:
     #  - Each torch.tensor object is implicitly converted into a pointer to its first element.
     #  - `triton.jit`'ed functions can be indexed with a launch grid to obtain a callable GPU kernel.
+
+    # EA: "Indexed with a launch grid", interesting
+
     #  - Don't forget to pass meta-parameters as keywords arguments.
     add_kernel[grid](x, y, output, n_elements, BLOCK_SIZE=1024)
     # We return a handle to z but, since `torch.cuda.synchronize()` hasn't been called, the kernel is still
