@@ -25,6 +25,15 @@ import triton
 import triton.language as tl
 
 # EA: So what is this pointer type? Is it a Triton type?
+# 
+# EA: Triton kernels convert their arguments to "pointers" if they have both
+# - A `.data_ptr` method
+# - A `.dtype` attribute. 
+# 
+# I'm not sure what is the Python API of these pointers. You can see below they
+# add an array of int to a pointer (pointer arithmetic), to obtain (I assume) an
+# array of pointers.
+# https://triton-lang.org/main/python-api/generated/triton.jit.html
 
 @triton.jit
 def add_kernel(x_ptr,  # *Pointer* to first input vector.
