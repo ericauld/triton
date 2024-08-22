@@ -64,7 +64,13 @@ def add_kernel(x_ptr,  # *Pointer* to first input vector.
 def add(x: torch.Tensor, y: torch.Tensor):
     # We need to preallocate the output.
     output = torch.empty_like(x)
+
+    # EA: What is the semantic difference here..."pre-allocate"?
+
     assert x.is_cuda and y.is_cuda and output.is_cuda
+
+    # EA: Interesting, `is_cuda` is an attribute, not a method
+
     n_elements = output.numel()
     # The SPMD launch grid denotes the number of kernel instances that run in
     # parallel. It is analogous to CUDA launch grids. It can be either
@@ -74,11 +80,12 @@ def add(x: torch.Tensor, y: torch.Tensor):
     # NOTE:
     #  - Each torch.tensor object is implicitly converted into a pointer to its first element.
     #  - `triton.jit`'ed functions can be indexed with a launch grid to obtain a callable GPU kernel.
-
-    # EA: "Indexed with a launch grid", interesting
-
+    #
     #  - Don't forget to pass meta-parameters as keywords arguments.
     add_kernel[grid](x, y, output, n_elements, BLOCK_SIZE=1024)
+
+    # EA: How do metaparameters interact with tl.constexpr?
+
     # We return a handle to z but, since `torch.cuda.synchronize()` hasn't been called, the kernel is still
     # running asynchronously at this point.
     return output
