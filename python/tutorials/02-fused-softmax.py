@@ -67,6 +67,9 @@ def naive_softmax(x):
 # `torch.jit.script` flags aims to perform this kind of "kernel fusion"
 # automatically but, as we will see later, it is still far from ideal.
 
+# EA: I don't know `torch.jit.script`...I wonder how it interacts w torch
+# compile. Maybe it was an early version of it?
+
 # %% Compute Kernel
 # --------------
 #
@@ -81,7 +84,10 @@ def naive_softmax(x):
 
 
 @triton.jit
-def softmax_kernel(output_ptr, input_ptr, input_row_stride, output_row_stride, n_rows, n_cols, BLOCK_SIZE: tl.constexpr,
+def softmax_kernel(output_ptr, input_ptr, 
+                   input_row_stride, output_row_stride, 
+                   n_rows, n_cols, 
+                   BLOCK_SIZE: tl.constexpr,
                    num_stages: tl.constexpr):
     # starting row of the program
     row_start = tl.program_id(0)
@@ -142,8 +148,9 @@ def softmax(x):
     # pre-compile kernel to get register usage and compute thread occupancy.
     kernel, num_programs = kernels.get(BLOCK_SIZE, (None, 0))
     if kernel is None:
-        kernel = softmax_kernel.warmup(y, x, x.stride(0), y.stride(0), n_rows, n_cols, BLOCK_SIZE=BLOCK_SIZE,
-                                       num_stages=num_stages, num_warps=num_warps, grid=(1, ))
+        kernel = softmax_kernel.warmup(y, x, x.stride(0), y.stride(0), n_rows, n_cols, 
+                                       BLOCK_SIZE=BLOCK_SIZE, num_stages=num_stages, 
+                                       num_warps=num_warps, grid=(1, ))
         kernel._init_handles()
         n_regs = kernel.n_regs
         size_smem = kernel.metadata.shared
