@@ -151,7 +151,11 @@ def softmax(x):
         kernel = softmax_kernel.warmup(y, x, x.stride(0), y.stride(0), n_rows, n_cols, 
                                        BLOCK_SIZE=BLOCK_SIZE, num_stages=num_stages, 
                                        num_warps=num_warps, grid=(1, ))
+        # EA: I don't see `warmup` in the docs...it's a method on JITFunction,
+        # in python / triton / runtime / jit.py line ~762
         kernel._init_handles()
+        # EA: `_init_handles` is a method on `CompiledKernel`, in python /
+        # triton / compiler / compiler.py line ~375
         n_regs = kernel.n_regs
         size_smem = kernel.metadata.shared
         if is_hip():
