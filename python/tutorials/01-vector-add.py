@@ -23,14 +23,12 @@ import torch
 
 import triton
 import triton.language as tl
-
-# EA: So what is this pointer type? Is it a Triton type?
-# 
+ 
 # EA: Triton kernels convert their arguments to "pointers" if they have both
 # - A `.data_ptr` method
 # - A `.dtype` attribute. 
 # 
-# I'm not sure what is the Python API of these pointers. You can see below they
+# I'm not sure the Python API of these pointers. You can see below they
 # add an array of int to a pointer (pointer arithmetic), to obtain (I assume) an
 # array of pointers.
 # https://triton-lang.org/main/python-api/generated/triton.jit.html
@@ -117,6 +115,9 @@ print(output_torch)
 print(output_triton)
 print(f'The maximum difference between torch and triton is '
       f'{torch.max(torch.abs(output_torch - output_triton))}')
+
+# EA: But they never called `torch.cuda.synchronize()`. Is it implicit if you're
+# asking for the value of something that `.is_cuda`?
 
 # %%
 # Seems like we're good to go!
