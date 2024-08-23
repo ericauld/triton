@@ -33,9 +33,7 @@ import triton.language as tl
 # of pointers. https://triton-lang.org/main/python-api/generated/triton.jit.html
 
 @triton.jit
-def add_kernel(x_ptr,  # *Pointer* to first input vector.
-               y_ptr,  # *Pointer* to second input vector.
-               output_ptr,  # *Pointer* to output vector.
+def add_kernel(x_ptr, y_ptr, output_ptr,
                n_elements,  # Size of the vector.
                BLOCK_SIZE: tl.constexpr,  # Number of elements each program should process.
                # NOTE: `constexpr` so it can be used as a shape value.
@@ -43,12 +41,14 @@ def add_kernel(x_ptr,  # *Pointer* to first input vector.
     # There are multiple 'programs' processing different data. We identify which program
     # we are here:
     pid = tl.program_id(axis=0)  # We use a 1D launch grid so axis is 0.
-    # This program will process inputs that are offset from the initial data.
-    # For instance, if you had a vector of length 256 and block_size of 64, the programs
-    # would each access the elements [0:64, 64:128, 128:192, 192:256].
+
     # Note that offsets is a list of pointers:
     block_start = pid * BLOCK_SIZE
     offsets = block_start + tl.arange(0, BLOCK_SIZE)
+
+    # EA: "offsets is a list of pointers? Isn't it rather a list of ints that
+    # will get added to the pointer in pointer arithmetic?
+
     # Create a mask to guard memory operations against out-of-bounds accesses.
     mask = offsets < n_elements
     # EA: So this is broadcast, I guess
@@ -114,9 +114,6 @@ print(output_torch)
 print(output_triton)
 print(f'The maximum difference between torch and triton is '
       f'{torch.max(torch.abs(output_torch - output_triton))}')
-
-# EA: But they never called `torch.cuda.synchronize()`. Is it implicit if you're
-# asking for the value of something that `.is_cuda`?
 
 # %%
 # Seems like we're good to go!
