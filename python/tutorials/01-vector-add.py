@@ -28,10 +28,9 @@ import triton.language as tl
 # - A `.data_ptr` method
 # - A `.dtype` attribute. 
 # 
-# I'm not sure the Python API of these pointers. You can see below they
-# add an array of int to a pointer (pointer arithmetic), to obtain (I assume) an
-# array of pointers.
-# https://triton-lang.org/main/python-api/generated/triton.jit.html
+# I'm not sure the Python API of these pointers. You can see below they add an
+# array of int to a pointer (pointer arithmetic), to obtain (I assume) an array
+# of pointers. https://triton-lang.org/main/python-api/generated/triton.jit.html
 
 @triton.jit
 def add_kernel(x_ptr,  # *Pointer* to first input vector.
