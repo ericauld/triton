@@ -98,8 +98,14 @@ def softmax_kernel(output_ptr, input_ptr,
         # The stride represents how much we need to increase the pointer to advance 1 row
         row_start_ptr = input_ptr + row_idx * input_row_stride
 
-        # EA: Interesting, the "input row stride" is not the same as the step
-        # size through the loop (though I think the loop is over rows)
+        # EA: It's taking (n_rows):(input_row_stride) and tiling it like
+        # (n_workers, n_rows/n_workers) : (input_row_stride, input_row_stride *
+        # n_workers), and slicing into the first mode with the worker number, like [worker_num, _]. This produces 
+        #
+        #         worker_num * input_row_stride + _ * input_row_stride * num_workers
+        #      = (worker_num + _ * num_workers) * input_row_stride
+        #
+        # and they're calling that first factor "row_idx" and making it the loop variable.
 
         # The block size is the next power of two greater than n_cols, so we can fit each
         # row in a single block
