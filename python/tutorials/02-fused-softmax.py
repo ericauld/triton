@@ -100,16 +100,22 @@ def softmax_kernel(output_ptr, input_ptr,
 
         # EA: It's taking (n_rows):(input_row_stride) and tiling it like
         # (n_workers, n_rows/n_workers) : (input_row_stride, input_row_stride *
-        # n_workers), and slicing into the first mode with the worker number, like [worker_num, _]. This produces 
+        # n_workers), and slicing into the first mode with the worker number,
+        # like [worker_num, _]. This produces 
         #
         #         worker_num * input_row_stride + _ * input_row_stride * num_workers
         #      = (worker_num + _ * num_workers) * input_row_stride
         #
-        # and they're calling that first factor "row_idx" and making it the loop variable.
+        # and they're calling that first factor "row_idx" and making it the loop
+        # variable.
 
         # The block size is the next power of two greater than n_cols, so we can fit each
         # row in a single block
         col_offsets = tl.arange(0, BLOCK_SIZE)
+
+        # EA: I don't understand the "...so we can fit each row into a single
+        # block" part.
+
         input_ptrs = row_start_ptr + col_offsets
         # Load the row into SRAM, using a mask since BLOCK_SIZE may be > than n_cols
         mask = col_offsets < n_cols
