@@ -76,9 +76,6 @@ def naive_softmax(x):
 # Our softmax kernel works as follows: each program loads a set of rows of the
 # input matrix X strided by number of programs, normalizes it and writes back
 # the result to the output Y.
-
-# EA: "Strided by number of programs"? That doesn't make sense to me...
-
 #
 # Note that one important limitation of Triton is that each block must have a
 # power-of-two number of elements, so we need to internally "pad" each row and
@@ -95,11 +92,15 @@ def softmax_kernel(output_ptr, input_ptr,
     # starting row of the program
     row_start = tl.program_id(0)
     row_step = tl.num_programs(0)
+    # EA: Oh, interesting, so the workers are not handling contiguous blocks of
+    # rows; they're sort of round-robining it.
     for row_idx in tl.range(row_start, n_rows, row_step, num_stages=num_stages):
-        # EA: The num_stages var is
-
         # The stride represents how much we need to increase the pointer to advance 1 row
         row_start_ptr = input_ptr + row_idx * input_row_stride
+
+        # EA: Interesting, the "input row stride" is not the same as the step
+        # size through the loop (though I think the loop is over rows)
+
         # The block size is the next power of two greater than n_cols, so we can fit each
         # row in a single block
         col_offsets = tl.arange(0, BLOCK_SIZE)
