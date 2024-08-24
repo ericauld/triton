@@ -76,6 +76,9 @@ def naive_softmax(x):
 # Our softmax kernel works as follows: each program loads a set of rows of the
 # input matrix X strided by number of programs, normalizes it and writes back
 # the result to the output Y.
+
+# EA: "Strided by number of programs"? That doesn't make sense to me...
+
 #
 # Note that one important limitation of Triton is that each block must have a
 # power-of-two number of elements, so we need to internally "pad" each row and
@@ -93,6 +96,8 @@ def softmax_kernel(output_ptr, input_ptr,
     row_start = tl.program_id(0)
     row_step = tl.num_programs(0)
     for row_idx in tl.range(row_start, n_rows, row_step, num_stages=num_stages):
+        # EA: The num_stages var is
+
         # The stride represents how much we need to increase the pointer to advance 1 row
         row_start_ptr = input_ptr + row_idx * input_row_stride
         # The block size is the next power of two greater than n_cols, so we can fit each
@@ -119,6 +124,8 @@ def softmax_kernel(output_ptr, input_ptr,
 
 device = torch.cuda.current_device()
 properties = driver.active.utils.get_device_properties(device)
+# EA: Weird, if I run this on a Colab it tells me that "'CudaDriver' object has
+# no attribute 'active'"
 NUM_SM = properties["multiprocessor_count"]
 NUM_REGS = properties["max_num_regs"]
 SIZE_SMEM = properties["max_shared_mem"]
