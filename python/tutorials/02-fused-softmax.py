@@ -111,17 +111,21 @@ def softmax_kernel(output_ptr, input_ptr,
 # and they're calling that first factor "row_idx" and making it the loop
 # variable.
 
+        # EA: By "...so we can fit each row into a single block" below I think
+        # they're saying that things are row major, and we don't want to split
+        # rows across blocks, so we choose the block size large enough that an
+        # entire row (a row is of size n_cols) can fit in there.
+
         # The block size is the next power of two greater than n_cols, so we can fit each
         # row in a single block
         col_offsets = tl.arange(0, BLOCK_SIZE)
-
-        # EA: I don't understand the "...so we can fit each row into a single
-        # block" part.
-
         input_ptrs = row_start_ptr + col_offsets
         # Load the row into SRAM, using a mask since BLOCK_SIZE may be > than n_cols
         mask = col_offsets < n_cols
         row = tl.load(input_ptrs, mask=mask, other=-float('inf'))
+
+        # EA: Why is `col_offsets < n_cols` the correct mask to use?
+
         # Subtract maximum for numerical stability
         row_minus_max = row - tl.max(row, axis=0)
         # Note that exponentiation in Triton is fast but approximate (i.e., think __expf in CUDA)
