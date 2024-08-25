@@ -266,16 +266,25 @@ def matmul_kernel(
     # Map program ids `pid` to the block of C it should compute.
     # This is done in a grouped ordering to promote L2 data reuse.
     # See above `L2 Cache Optimizations` section for details.
+    # Program ID
     pid = tl.program_id(axis=0)
+    # Number of program ids along the M axis
     num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
+    # Number of programs ids along the N axis
     num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
+    # Number of programs in group
     num_pid_in_group = GROUP_SIZE_M * num_pid_n
+    # Id of the group this program is in
     group_id = pid // num_pid_in_group
+    # Row-id of the first program in the group
     first_pid_m = group_id * GROUP_SIZE_M
+    # If `num_pid_m` isn't divisible by `GROUP_SIZE_M`, the last group is smaller
     group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M)
+    # *Within groups*, programs are ordered in a column-major order
+    # Row-id of the program in the *launch grid*
     pid_m = first_pid_m + ((pid % num_pid_in_group) % group_size_m)
+    # Col-id of the program in the *launch grid*
     pid_n = (pid % num_pid_in_group) // group_size_m
-
     # ----------------------------------------------------------
     # Create pointers for the first blocks of A and B.
     # We will advance this pointer as we move in the K direction
@@ -285,6 +294,9 @@ def matmul_kernel(
     # See above `Pointer Arithmetic` section for details
     offs_am = (pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)) % M
     offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
+
+    # EA: Why are we modding by M, N here?
+
     offs_k = tl.arange(0, BLOCK_SIZE_K)
     a_ptrs = a_ptr + (offs_am[:, None] * stride_am + offs_k[None, :] * stride_ak)
     b_ptrs = b_ptr + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)

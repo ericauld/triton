@@ -124,7 +124,9 @@ def softmax_kernel(output_ptr, input_ptr,
         mask = col_offsets < n_cols
         row = tl.load(input_ptrs, mask=mask, other=-float('inf'))
 
-        # EA: Why is `col_offsets < n_cols` the correct mask to use?
+        # EA: Why is `col_offsets < n_cols` the correct mask to use? Oh, I see,
+        # bcs col_offsets is of the same size as the block, so we want only
+        # those entries of it that are within the nuber of cols.
 
         # Subtract maximum for numerical stability
         row_minus_max = row - tl.max(row, axis=0)
