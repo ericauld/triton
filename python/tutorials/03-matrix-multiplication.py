@@ -367,6 +367,16 @@ def matmul_kernel(
         # If it is out of bounds, set it to 0.
         a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0)
         b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
+
+        # EA: Why does the previous line not incorporate the stride? Oh, because
+        # the offs_k are integers that have not yet been multiplied by the
+        # stride.
+
+        # EA: Why is the condition < K - k * BLOCK_SIZE_K, and not just < K? Oh,
+        # that makes sense, so the condition they're expressing, in my preferred
+        # labeling, is offset < k - k' * K, or k' * K + offset < k, and the
+        # offset is local to the block
+
         # We accumulate along the K dimension.
         accumulator = tl.dot(a, b, accumulator)
         # Advance the ptrs to the next K block.

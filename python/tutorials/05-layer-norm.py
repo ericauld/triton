@@ -26,6 +26,9 @@ In doing so, you will learn about:
 #
 # .. math:: y = \frac{ x - \text{E}[x] }{ \sqrt{\text{Var}(x) + \epsilon} } * w
 #    + b
+
+# EA: Is w a matrix and b is a vector? I guess it must be. Must it be square?
+
 #
 # where :math:`\epsilon` is a small constant added to the denominator for
 # numerical stability. Let’s first take a look at the forward pass
@@ -54,6 +57,9 @@ def _layer_norm_fwd_fused(
     Mean,  # pointer to the mean
     Rstd,  # pointer to the 1/std
     stride,  # how much to increase the pointer when moving by 1 row
+
+    # EA: "1 row" of what?
+
     N,  # number of columns in X
     eps,  # epsilon to avoid division by zero
     BLOCK_SIZE: tl.constexpr,
@@ -62,6 +68,9 @@ def _layer_norm_fwd_fused(
     row = tl.program_id(0)
     Y += row * stride
     X += row * stride
+
+    # EA: OK, base pointers for X and Y
+
     # Compute mean
     mean = 0
     _mean = tl.zeros([BLOCK_SIZE], dtype=tl.float32)
