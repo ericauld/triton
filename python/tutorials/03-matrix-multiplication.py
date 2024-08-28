@@ -266,6 +266,30 @@ def matmul_kernel(
     # Map program ids `pid` to the block of C it should compute.
     # This is done in a grouped ordering to promote L2 data reuse.
     # See above `L2 Cache Optimizations` section for details.
+
+    # EA: The line below "the order in which these blocks are computed..." I
+    # guess they're talking about ordering subordinate to a fixed CTA?
+
+    # EA: Also they're saying "...grouping blocks in groups of GROUP_M *rows*
+    # before switching to the next *column*...". I don't understand that. I do
+    # understand that they're looking at a blocked outer product picture, and I
+    # think the "grouping" they're suggesting is on one hand, (M, N) = 
+
+    # From that section: "Each program instance computes a [BLOCK_SIZE_M,
+    # BLOCK_SIZE_N] block of C. It is important to remember that the order in
+    # which these blocks are computed does matter, since it affects the L2 cache
+    # hit rate of our program, and unfortunately, a simple row-major
+    # ordering
+
+    # pid = tl.program_id(axis=0)
+    # grid_n = tl.cdiv(N, BLOCK_SIZE_N)
+    # pid_m = pid // grid_n
+    # pid_n = pid % grid_n
+ 
+    # is just not going to cut it. One possible solution is to launch blocks in
+    # an order that promotes data reuse. This can be done by ‘super-grouping’
+    # blocks in groups of GROUP_M rows before switching to the next column:
+
     # Program ID
     pid = tl.program_id(axis=0)
     # Number of program ids along the M axis
@@ -285,6 +309,36 @@ def matmul_kernel(
     pid_m = first_pid_m + ((pid % num_pid_in_group) % group_size_m)
     # Col-id of the program in the *launch grid*
     pid_n = (pid % num_pid_in_group) // group_size_m
+
+    # EA: OK, so they're unfortunately changing the var `grid_n` above to some
+    # other name in the actual code, I guess 
+
+    # (num_pid_m, num_pid_n) : (num_pid_n, 1)
+
+    # is the layout of programs.
+    #
+    # Further, they are tiling the programs into "groups" of size GROUP_SIZE_M *
+    # num_pid_n - ie. groups with the tiling described below, with coordinates
+    # like ((:, group_id), :).
+
+    # ((GROUP_SIZE_M, num_pid_m // GROUP_SIZE_M), num_pid_n) : ((num_pid_n , num_pid_n * GROUP_SIZE_M), 1)
+
+    # EA: I don't understand what they mean by "...programs are ordered...", I
+    # guess they just mean the layout of programs, like I was saying above.
+    #
+    # EA: So what are they achieving with this grouping? They were talking about
+    # L2 cache coherence...I guess I don't understand the semantics of the
+    # `tl.program_id(axis=0)`, like how can I reason about the difference
+    # between giving work to one program vs another?
+
+    # EA: Hmmm, so by this point in the code, GROUP_SIZE_M is not used anymore;
+    # it's all assimilated into pid_m and pid_n. They talk about pid_m and pid_n
+    # being the row and column ids of the program in the launch grid.
+
+    # EA: How does the "group" they're talking about interact with what they're
+    # calling the "launch grid", and is that a launch grid in the actual
+    # concrete, Cuda sense, or is it a Triton abstraction on top of that?
+
     # ----------------------------------------------------------
     # Create pointers for the first blocks of A and B.
     # We will advance this pointer as we move in the K direction
@@ -294,14 +348,13 @@ def matmul_kernel(
     # See above `Pointer Arithmetic` section for details
     offs_am = (pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)) % M
     offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
-
-    # EA: Why are we modding by M, N here?
-
     offs_k = tl.arange(0, BLOCK_SIZE_K)
     a_ptrs = a_ptr + (offs_am[:, None] * stride_am + offs_k[None, :] * stride_ak)
     b_ptrs = b_ptr + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
 
-    # EA: What's this [:, None] business?4
+    # EA: OK, so at this point, a_ptrs and b_ptrs I think are each 2d tensors of
+    # pointers to data, different for each cta; they are the addresses of the
+    # necessary tile of A, B for this CTA to do its work.
 
     # -----------------------------------------------------------
     # Iterate to compute a block of the C matrix.
@@ -314,10 +367,6 @@ def matmul_kernel(
         # If it is out of bounds, set it to 0.
         a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0)
         b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
-
-        # EA: The semantics of the `other` parameter are that if mask[idx] is
-        # false, other[idx] will be returned
-
         # We accumulate along the K dimension.
         accumulator = tl.dot(a, b, accumulator)
         # Advance the ptrs to the next K block.
